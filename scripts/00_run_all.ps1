@@ -31,7 +31,7 @@ try {
     }
 
     Write-Host "Installing requirements..."
-    pip install -r requirements.txt | Out-Null
+    python -m pip install -r requirements.txt
 
     Write-Host "Running Python Producer..."
     python kinesis.py
