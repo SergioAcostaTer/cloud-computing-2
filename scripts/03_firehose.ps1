@@ -15,14 +15,17 @@ if (-not (Test-Path $LAMBDA_SRC)) {
     exit 1
 }
 
-# Crear ZIP (PowerShell nativo)
+# Crear ZIP de forma segura (limpiando previos y evitando rutas relativas internas)
 Write-Host "Zippeando código..."
-Compress-Archive -Path $LAMBDA_SRC -DestinationPath $ZIP_PATH -Force
+if (Test-Path $ZIP_PATH) { Remove-Item $ZIP_PATH }
+Push-Location "$PSScriptRoot/../src/lambda/"
+Compress-Archive -Path "firehose_processor.py" -DestinationPath "function.zip" -Force
+Move-Item "function.zip" $ZIP_PATH -Force
+Pop-Location
 
-# Eliminar función si existe para actualizar limpiamente
+# Actualizar/Crear Lambda
 aws lambda delete-function --function-name $LAMBDA_NAME 2>$null
 
-# Crear función Lambda
 Write-Host "Creando función en AWS..."
 aws lambda create-function `
     --function-name $LAMBDA_NAME `
@@ -33,30 +36,37 @@ aws lambda create-function `
     --timeout 60 `
     --memory-size 128 | Out-Null
 
-# Obtener ARN de la Lambda
 $LAMBDA_ARN = (aws lambda get-function --function-name $LAMBDA_NAME --query 'Configuration.FunctionArn' --output text).Trim()
 Write-Host "Lambda creada: $LAMBDA_ARN" -ForegroundColor Green
 
-# --- 2. ESPERAR PROPAGACIÓN ---
-Write-Host "Esperando 10s..."
-Start-Sleep -Seconds 10
-
-# --- 3. CREAR FIREHOSE CON PARTICIONAMIENTO DINÁMICO ---
-Write-Host "`n[2/3] Creando Firehose con Particionamiento..." -ForegroundColor Yellow
-
-# Eliminar si existe
-aws firehose delete-delivery-stream --delivery-stream-name "consumo-energetico-firehose" 2>$null
+# Esperar propagación
 Start-Sleep -Seconds 5
 
-# Definir configuración compleja (JSON)
-# Nota: Prefix usa !{partitionKeyFromLambda:processing_date} que coincide con el Python
-$FIREHOSE_CONFIG = @"
+# --- 2. CREAR FIREHOSE ---
+Write-Host "`n[2/3] Creando Firehose con Particionamiento..." -ForegroundColor Yellow
+$DELIVERY_STREAM_NAME = "consumo-energetico-firehose"
+
+# Eliminar y esperar
+aws firehose delete-delivery-stream --delivery-stream-name $DELIVERY_STREAM_NAME 2>$null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Firehose existe. Borrando y esperando..." -ForegroundColor Magenta
+    for ($i=0; $i -lt 10; $i++) {
+        $status = aws firehose describe-delivery-stream --delivery-stream-name $DELIVERY_STREAM_NAME 2>$null
+        if (-not $?) { break } # Si da error, es que ya no existe
+        Start-Sleep -Seconds 5
+    }
+}
+
+# --- SOLUCIÓN ERROR JSON ---
+# Guardamos el JSON en un archivo temporal para evitar problemas de comillas en PowerShell
+# CORRECCIÓN: SizeInMBs debe ser al menos 64 cuando Dynamic Partitioning está habilitado
+$FIREHOSE_CONFIG_JSON = @"
 {
     "BucketARN": "arn:aws:s3:::$($env:BUCKET_NAME)",
     "RoleARN": "$env:ROLE_ARN",
     "Prefix": "raw/energy_consumption/processing_date=!{partitionKeyFromLambda:processing_date}/",
     "ErrorOutputPrefix": "errors/!{firehose:error-output-type}/",
-    "BufferingHints": { "SizeInMBs": 1, "IntervalInSeconds": 60 },
+    "BufferingHints": { "SizeInMBs": 64, "IntervalInSeconds": 60 },
     "ProcessingConfiguration": {
         "Enabled": true,
         "Processors": [
@@ -77,11 +87,23 @@ $FIREHOSE_CONFIG = @"
 }
 "@
 
-# Crear Stream
+$CONFIG_FILE = "$PSScriptRoot/firehose_config.json"
+$FIREHOSE_CONFIG_JSON | Out-File -FilePath $CONFIG_FILE -Encoding ASCII
+
+Write-Host "Configuración escrita en $CONFIG_FILE"
+
+# Crear Stream usando file://
 aws firehose create-delivery-stream `
-    --delivery-stream-name "consumo-energetico-firehose" `
+    --delivery-stream-name $DELIVERY_STREAM_NAME `
     --delivery-stream-type KinesisStreamAsSource `
     --kinesis-stream-source-configuration "KinesisStreamARN=arn:aws:kinesis:$($env:AWS_REGION):$($env:ACCOUNT_ID):stream/consumo-energetico-stream,RoleARN=$env:ROLE_ARN" `
-    --extended-s3-destination-configuration $FIREHOSE_CONFIG
+    --extended-s3-destination-configuration "file://$CONFIG_FILE"
 
-Write-Host "Firehose creado exitosamente." -ForegroundColor Green
+if ($?) {
+    Write-Host "Firehose creado exitosamente." -ForegroundColor Green
+} else {
+    Write-Host "Error al crear Firehose." -ForegroundColor Red
+}
+
+# Limpieza
+Remove-Item $CONFIG_FILE -ErrorAction SilentlyContinue
