@@ -2,10 +2,10 @@
 
 Write-Host "Creating S3 Bucket and folders..."
 
-# 1. Create S3 Bucket
+# 1. Create Bucket
 aws s3 mb "s3://$env:BUCKET_NAME"
 
-# 2. Create directory structure
+# 2. Create folders (keys)
 aws s3api put-object --bucket $env:BUCKET_NAME --key raw/
 aws s3api put-object --bucket $env:BUCKET_NAME --key processed/
 aws s3api put-object --bucket $env:BUCKET_NAME --key config/

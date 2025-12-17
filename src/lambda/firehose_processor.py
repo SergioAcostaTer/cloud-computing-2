@@ -4,24 +4,23 @@ import datetime
 
 def lambda_handler(event, context):
     """
-    Recibe registros de Firehose, decodifica, agrega fecha de procesamiento
-    y define la partition key para S3.
+    Decodes Firehose records, adds 'processing_date' for partitioning,
+    and re-encodes data.
     """
     output = []
     
     for record in event['records']:
         try:
-            # 1. Decodificar data (viene en base64)
+            # 1. Decode (base64 -> json)
             payload = base64.b64decode(record['data']).decode('utf-8')
             data_json = json.loads(payload)
             
-            # 2. Lógica de negocio: Obtener fecha para partición
+            # 2. Logic: Extract date for partition key
             processing_time = datetime.datetime.now(datetime.timezone.utc)
             partition_date = processing_time.strftime('%Y-%m-%d')
 
-
-            # 3. Preparar registro de salida
-            # Firehose necesita que devolvamos los datos codificados de nuevo
+            # 3. Prepare output
+            # Firehose expects data re-encoded in base64
             output_record = {
                 'recordId': record['recordId'],
                 'result': 'Ok',
@@ -35,7 +34,7 @@ def lambda_handler(event, context):
             output.append(output_record)
             
         except Exception as e:
-            # Si falla, mandamos a bucket de error
+            # Send to error bucket if failed
             print(f"Error processing record: {e}")
             output_record = {
                 'recordId': record['recordId'],

@@ -11,3 +11,6 @@ __pycache__/
 
 # History Visual Studio Code
 .history/
+
+# Logs
+logs/

@@ -6,7 +6,7 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from pyspark.sql.functions import col, sum as spark_sum, avg, substring
 
-# 1. Inicialización
+# 1. Init
 args = getResolvedOptions(sys.argv, ['JOB_NAME', 'database', 'table_name', 'output_path'])
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -18,7 +18,7 @@ database = args['database']
 table_name = args['table_name']
 output_path = args['output_path']
 
-# 2. Lectura desde Catálogo
+# 2. Read from Catalog
 datasource = glueContext.create_dynamic_frame.from_catalog(
     database=database,
     table_name=table_name,
@@ -27,21 +27,20 @@ datasource = glueContext.create_dynamic_frame.from_catalog(
 
 df = datasource.toDF()
 
-# 3. Transformaciones (Mensual)
-# Extraemos YYYY-MM (7 caracteres)
+# 3. Transform (Monthly)
+# Extract YYYY-MM
 df_transformed = df.withColumn("fecha_mes", substring(col("timestamp_origen"), 1, 7))
 
-# Agregación por Mes y Tipo
+# Aggregate by Month/Type
 monthly_agg = df_transformed.groupBy("fecha_mes", "tipo") \
     .agg(
         spark_sum("valor").alias("total_valor_mw"),
         avg("porcentaje").alias("avg_porcentaje")
     )
 
-# Reparticionar por mes
 monthly_agg = monthly_agg.repartition("fecha_mes")
 
-# 4. Escritura a S3 (Processed Monthly)
+# 4. Write to S3
 output_dyf = glueContext.create_dynamic_frame.from_catalog(
     database=database,
     table_name=table_name
