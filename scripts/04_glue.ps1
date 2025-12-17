@@ -112,8 +112,8 @@ Remove-Item $MonthlyCmdFile, $MonthlyArgsFile
 Write-Host "`n[4/4] Starting Crawler..."
 aws glue start-crawler --name energy_raw_crawler
 
-Write-Host "Waiting 90s for Crawler to catalog data..." -ForegroundColor Magenta
-Start-Sleep -Seconds 90
+Write-Host "Waiting 200s for Crawler to catalog data..." -ForegroundColor Magenta
+Start-Sleep -Seconds 200
 
 Write-Host "Starting ETL Jobs..." -ForegroundColor Yellow
 aws glue start-job-run --job-name energy_daily_job | Out-Null
