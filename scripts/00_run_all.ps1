@@ -30,21 +30,15 @@ Write-Host "`n[4/5] Generating Data & Syncing..." -ForegroundColor Yellow
 Push-Location "$PSScriptRoot/../src/producer"
 
 try {
-    # Auto-rename example file if actual data file is missing
-    if (-not (Test-Path "../data/datos.json") -and (Test-Path "../data/datos.json.example")) {
-        Write-Host "Renaming example data file to datos.json..."
-        Copy-Item "../data/datos.json.example" "../data/datos.json"
-    }
-
-    # Validation
-    if (-not (Test-Path "../data/datos.json")) {
-        throw "Data file '../data/datos.json' not found."
+    # Check for mydata.json
+    if (-not (Test-Path "../data/mydata.json")) {
+        throw "Data file '../data/mydata.json' not found. Please ensure your custom data file exists."
     }
 
     Write-Host "Installing requirements..."
     python -m pip install -r requirements.txt | Out-Null
 
-    Write-Host "Running Python Producer..."
+    Write-Host "Running Python Producer with mydata.json..."
     python kinesis.py
 }
 catch {

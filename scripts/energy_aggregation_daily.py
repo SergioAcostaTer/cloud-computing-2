@@ -31,11 +31,13 @@ df = datasource.toDF()
 # Extract date (YYYY-MM-DD) from timestamp
 df_transformed = df.withColumn("fecha_reporte", substring(col("timestamp_origen"), 1, 10))
 
-# Aggregate: Sum value, Avg percentage by Date/Type
+# Aggregate: Sum value, Avg percentage, Avg Temp, Avg Voltage by Date/Type
 daily_agg = df_transformed.groupBy("fecha_reporte", "tipo") \
     .agg(
-        spark_sum("valor").alias("total_valor_mw"),
-        avg("porcentaje").alias("avg_porcentaje")
+        spark_sum("valor").alias("total_valor"),
+        avg("porcentaje").alias("avg_porcentaje"),
+        avg("temperature").alias("avg_temperature_c"),
+        avg("voltage").alias("avg_voltage_v")
     )
 
 # Repartition for optimal writes

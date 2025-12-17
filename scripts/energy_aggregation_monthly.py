@@ -34,8 +34,10 @@ df_transformed = df.withColumn("fecha_mes", substring(col("timestamp_origen"), 1
 # Aggregate by Month/Type
 monthly_agg = df_transformed.groupBy("fecha_mes", "tipo") \
     .agg(
-        spark_sum("valor").alias("total_valor_mw"),
-        avg("porcentaje").alias("avg_porcentaje")
+        spark_sum("valor").alias("total_valor"),
+        avg("porcentaje").alias("avg_porcentaje"),
+        avg("temperature").alias("avg_temperature_c"),
+        avg("voltage").alias("avg_voltage_v")
     )
 
 monthly_agg = monthly_agg.repartition("fecha_mes")
