@@ -112,8 +112,14 @@ Remove-Item $MonthlyCmdFile, $MonthlyArgsFile
 Write-Host "`n[4/4] Starting Crawler..."
 aws glue start-crawler --name energy_raw_crawler
 
-Write-Host "Waiting 200s for Crawler to catalog data..." -ForegroundColor Magenta
-Start-Sleep -Seconds 200
+Write-Host "Waiting for Crawler to finish cataloging..." -ForegroundColor Magenta
+
+# Poll until crawler is back to READY state
+do {
+    Start-Sleep -Seconds 15
+    $CrawlerStatus = (aws glue get-crawler --name energy_raw_crawler | ConvertFrom-Json).Crawler.State
+    Write-Host "Crawler Status: $CrawlerStatus" -ForegroundColor Gray
+} while ($CrawlerStatus -ne "READY")
 
 Write-Host "Starting ETL Jobs..." -ForegroundColor Yellow
 aws glue start-job-run --job-name energy_daily_job | Out-Null
